@@ -1,0 +1,13 @@
+diff --git a/cocos2dx/platform/win32/CCEGLView.cpp b/cocos2dx/platform/win32/CCEGLView.cpp
+--- a/cocos2dx/platform/win32/CCEGLView.cpp
++++ b/cocos2dx/platform/win32/CCEGLView.cpp
+@@ -300,7 +300,8 @@ bool CCEGLView::Create()
+             WS_EX_APPWINDOW | WS_EX_WINDOWEDGE,    // Extended Style For The Window
+             kWindowClassName,                                    // Class Name
+             wszBuf,                                                // Window Title
+-            WS_CAPTION | WS_POPUPWINDOW | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME,   // resizable
++            WS_CAPTION | WS_POPUPWINDOW | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME   // resizable
++            | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,   // GL must not paint over the inline text box (patch 0012)
+             0, 0,                                                // Window Position
+             //TODO: Initializing width with a large value to avoid getting a wrong client area by 'GetClientRect' function.
+             1000,                                               // Window Width

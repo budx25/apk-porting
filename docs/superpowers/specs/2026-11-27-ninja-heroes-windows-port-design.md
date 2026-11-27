@@ -133,12 +133,12 @@ Owner's requirement: every phone-only motion that hurts the experience gets a de
 
 | Phone gesture today | Desktop replacement | Notes |
 |---|---|---|
-| Swipe pages left/right | **Mouse wheel** or **← / →** | Synthesize the same touch swipe (began → moves → ended) at the cursor, or at screen centre for the keys, so every paged view reacts as if swiped. |
-| Drag to scroll a list | **Mouse wheel** scrolls the view under the cursor; **Shift+wheel** scrolls sideways | Same synthesized drag; distance per wheel notch tuned so one notch is about one row. |
+| Swipe pages left/right | **Mouse wheel**, or a **two-finger swipe** on a trackpad | Synthesize the same touch swipe (began → moves → ended) at the cursor, so every paged view reacts as if swiped. A scroll is one continuous touch: it follows every wheel or trackpad event and lifts after a short pause. (← / → were dropped after the play test: the owner found them unnecessary.) |
+| Drag to scroll a list | **Mouse wheel** or trackpad scrolls the view under the cursor; **Shift+wheel** or a sideways trackpad swipe scrolls sideways | Same synthesized drag; distance per wheel notch tuned so one notch is about one row. |
 | Android back button | **Esc** | Route to the engine's keypad "back" event, which the game already handles for Android. |
 | Tap the main button of a dialog | **Enter** | When a dialog with a single main button (the game's `PromptView`-style boxes) is on top, trigger that button. Best effort: dialogs with several choices are left to the mouse. |
 | Tap a text field → separate Win32 pop-up box | **Type directly into the field** | Replace the old engine's modal input box (`CCEditBoxImplWin` / `CWin32InputBox`) with inline editing: caret, typing, Backspace, Tab between fields, Enter submits, paste with Ctrl+V. Password fields stay masked. |
-| Pinch to zoom (only if a screen uses it) | **Ctrl+wheel** | Synthesized two-finger pinch around the cursor. |
+| Pinch to zoom (only if a screen uses it) | **Ctrl+wheel** (a trackpad pinch arrives as this) | Synthesized two-finger pinch around the cursor. |
 | Fixed 1136×640 window | **Resizable window, F11 fullscreen** (borderless) | The game keeps its design resolution and scales to fit with letterboxing; the launcher's window-size setting picks the starting size. |
 
 Leave the game's own animations, loading steps and pacing alone: they are part of how it plays, not phone-specific gestures.
@@ -154,7 +154,7 @@ Leave the game's own animations, loading steps and pacing alone: they are part o
 
 - **Launcher unit tests:** version-reply parsing; patch URL building (`1.1.1`/`2.6.1` → `/xxrz/2/1.1.1_2.6.1.zip`); safe extraction rejects `..`, absolute paths and drive letters; a size mismatch aborts without touching `game\`.
 - **Engine patches:** the build succeeds from a clean checkout via `port/build.ps1`.
-- **Desktop input (manual):** the wheel and ← / → change pages on a paged screen; the wheel scrolls a long list (Shift+wheel for a sideways one); Esc closes a dialog and goes back; Enter confirms a one-button dialog; typing goes straight into the email and password fields with no pop-up; resizing the window and F11 keep the game correctly scaled. Then the play-testing friction list is fully resolved or accepted.
+- **Desktop input (manual):** the wheel and a trackpad two-finger swipe change pages on a paged screen; the wheel scrolls a long list (Shift+wheel for a sideways one); Esc closes a dialog and goes back; Enter confirms a one-button dialog; typing goes straight into the email and password fields with no pop-up; resizing the window and F11 keep the game correctly scaled. Then the play-testing friction list is fully resolved or accepted.
 - **Acceptance (manual, owner logs in themselves):** fresh data folder → pick APK → update to current → login form appears → log in → choose server → in game. After that, a restart goes straight to server selection with no download. The logs contain no email address (`Select-String` check, as in the spike).
 
 ## Risks
@@ -165,7 +165,7 @@ Leave the game's own animations, loading steps and pacing alone: they are part o
 
 ## Left to the builder
 
-Launcher UI toolkit and crate structure; whether the launcher stays running; how the synthesized wheel/arrow swipes are tuned (distance, speed, step per notch); how inline text editing is drawn (engine-drawn field or an overlaid native edit control); how `pc.openURL` is bound; patch-chain edge cases; the data-folder location; window-size presets; whether to rebuild the old C libraries (preferred) or keep the shim; module and file names inside `port/app/`.
+Launcher UI toolkit and crate structure; whether the launcher stays running; how the synthesized wheel swipes are tuned (distance, speed, step per notch); how inline text editing is drawn (engine-drawn field or an overlaid native edit control); how `pc.openURL` is bound; patch-chain edge cases; the data-folder location; window-size presets; whether to rebuild the old C libraries (preferred) or keep the shim; module and file names inside `port/app/`.
 
 ## Open items to resolve during the build
 

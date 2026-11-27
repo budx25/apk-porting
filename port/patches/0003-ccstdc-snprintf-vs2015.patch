@@ -1,0 +1,14 @@
+diff --git a/cocos2dx/platform/win32/CCStdC.h b/cocos2dx/platform/win32/CCStdC.h
+index 28e574a..1a9230b 100644
+--- a/cocos2dx/platform/win32/CCStdC.h
++++ b/cocos2dx/platform/win32/CCStdC.h
+@@ -39,7 +39,8 @@ THE SOFTWARE.
+     #define isnan   _isnan
+ #endif
+ 
+-#ifndef snprintf
++// VS2015+ has a real snprintf
++#if !defined(snprintf) && defined(_MSC_VER) && _MSC_VER < 1900
+ #define snprintf _snprintf
+ #endif
+ 
