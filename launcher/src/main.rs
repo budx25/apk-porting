@@ -1,6 +1,7 @@
 mod extract;
 mod http;
 mod install;
+mod update;
 mod paths;
 mod urls;
 #[cfg(test)]
