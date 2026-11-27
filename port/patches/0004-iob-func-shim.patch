@@ -1,0 +1,18 @@
+diff --git a/cocos2dx/platform/win32/CCCommon.cpp b/cocos2dx/platform/win32/CCCommon.cpp
+index a5a159b..1cbc325 100644
+--- a/cocos2dx/platform/win32/CCCommon.cpp
++++ b/cocos2dx/platform/win32/CCCommon.cpp
+@@ -72,3 +72,13 @@ void CCLuaLog(const char *pszMsg)
+ }
+ 
+ NS_CC_END
++
++// prebuilt libjpeg/libpng (VS2010-era) call __iob_func, removed in the VS2015+ CRT.
++// shortcut: returns copies of the streams, so writing through them is unsafe. Only libjpeg/libpng error paths reach it
++// (libwebsockets logging is rerouted in 0006); rebuild those libraries with v143 to remove this.
++extern "C" FILE* __cdecl __iob_func(void)
++{
++    static FILE iob[3];
++    iob[0] = *stdin; iob[1] = *stdout; iob[2] = *stderr;
++    return iob;
++}

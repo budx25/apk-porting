@@ -1,0 +1,7 @@
+engine_repo=https://github.com/cocos2d/cocos2d-x.git
+engine_commit=dab2794b106d2ceb54597f4f0e9a2ae7e2ac8894
+bindings_path=scripting/javascript/bindings/generated
+bindings_repo=https://github.com/kusharami/cocos2dx-autogen-bindings.git
+bindings_commit=cfbd4d1e703b695c4897d818c9a4231bca0fa24b
+deps_url=https://github.com/cocos2d/cocos2d-x-3rd-party-libs-bin/archive/v2-deps-9.zip
+deps_sha256=a5868031ffb6bbc6991e42ffba5b69773b1b4890bb89b8305c5063438ccbce9c

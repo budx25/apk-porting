@@ -1,0 +1,15 @@
+diff --git a/extensions/network/HttpClient.cpp b/extensions/network/HttpClient.cpp
+index b38e040..9166266 100644
+--- a/extensions/network/HttpClient.cpp
++++ b/extensions/network/HttpClient.cpp
+@@ -231,8 +231,8 @@ static THREAD_VOID networkThread(THREAD_VOID)
+         s_responseQueue = NULL;
+     }
+ 
+-    pthread_exit(NULL);
+-    
++    // pthreadVCE2 implements pthread_exit as a C++ throw from the old MSVCRT, which
++    // aborts when it unwinds through VS2022-built frames; returning ends the thread the same way.
+     return THREAD_RETURN;
+ 
+ }

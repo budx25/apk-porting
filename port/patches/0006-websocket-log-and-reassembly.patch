@@ -1,0 +1,52 @@
+diff --git a/extensions/network/WebSocket.cpp b/extensions/network/WebSocket.cpp
+index a5f9048..720b4bb 100644
+--- a/extensions/network/WebSocket.cpp
++++ b/extensions/network/WebSocket.cpp
+@@ -437,7 +437,9 @@ void WebSocket::onSubThreadStarted()
+ 	info.gid = -1;
+ 	info.uid = -1;
+     info.user = (void*)this;
+-    
++
++    // the prebuilt libwebsockets logs to an old-CRT stderr that crashes under VS2022; route its errors/warnings to CCLog
++    lws_set_log_level(LLL_ERR | LLL_WARN, [](int, const char* line) { CCLog("[lws] %s", line); });
+ 	_wsContext = lws_create_context(&info);
+     
+ 	if(NULL != _wsContext){
+@@ -587,6 +589,14 @@ int WebSocket::onSocketCallback(struct lws *wsi,
+             {
+                 if (in && len > 0)
+                 {
++                    // libwebsockets delivers a message in pieces (4 KB each by default);
++                    // collect them and deliver once the message is complete
++                    _rxBuffer.append((const char*)in, len);
++                    if (!lws_is_final_fragment(wsi) || lws_remaining_packet_payload(wsi) > 0)
++                        break;
++                    in = (void*)_rxBuffer.data();
++                    len = _rxBuffer.size();
++
+                     WsMessage* msg = new WsMessage();
+                     msg->what = WS_MSG_TO_UITHREAD_MESSAGE;
+                     
+@@ -611,7 +621,8 @@ int WebSocket::onSocketCallback(struct lws *wsi,
+                     data->bytes = bytes;
+                     data->len = len;
+                     msg->obj = (void*)data;
+-                    
++                    _rxBuffer.clear();
++
+                     _wsHelper->sendMessageToUIThread(msg);
+                 }
+             }
+diff --git a/extensions/network/WebSocket.h b/extensions/network/WebSocket.h
+index 957b52d..d374298 100644
+--- a/extensions/network/WebSocket.h
++++ b/extensions/network/WebSocket.h
+@@ -162,6 +162,7 @@ private:
+     Delegate* _delegate;
+     int _SSLConnection;
+     struct lws_protocols* _wsProtocols;
++    std::string _rxBuffer; // joins a message's fragments before handing it to the UI thread
+ };
+ 
+ NS_CC_EXT_END
