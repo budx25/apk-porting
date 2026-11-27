@@ -12,6 +12,16 @@
     var vf = {};
     try { vf = JSON.parse(pc.readTextFile('VERSION') || '{}'); } catch (e) { log('VERSION unreadable'); }
 
+    // Traced in the Android engine (VersionUtil::VersionUtil, VersionScene::onSuccess): before main.js
+    // runs it reads VERSION and saves "ch" under A5 (the script's StoreConst.sdk), and the client
+    // version under A1, which the update screen rewrites after every patch. serverUtil reads both.
+    // The launcher does the updating here, so A1 simply follows VERSION.
+    function seedFromVersion(vf) {
+        if (vf.ch) sys.localStorage.setItem('A5', vf.ch);
+        if (vf.v) sys.localStorage.setItem('A1', vf.v);
+    }
+    seedFromVersion(vf);
+
     // Inert stand-in for anything not listed below: callable, constructible, chainable.
     function inert(path) {
         return new Proxy(function () {}, {
@@ -48,7 +58,9 @@
             getTestVersion: function () { return false; },
             checkNetwork: function () { return true; },
             getAccountId: function () { return ''; },
-            getClientDeviceInfo: function () { return ''; }  // format: see Task B4
+            // Android returns Java NativeCall.getDeviceInfo(): a JSON object string. Its keys couldn't be
+            // traced (shortcut: generic Windows values; trace NativeCall if the server ever rejects them).
+            getClientDeviceInfo: function () { return JSON.stringify({ platform: 'windows', os: 'Windows', model: 'PC' }); }
         }),
         JSBTools: nativeClass('ts.JSBTools', {
             // The game shows its own "new version available" dialog first; updating is the launcher's job.
