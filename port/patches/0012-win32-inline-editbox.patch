@@ -1,0 +1,286 @@
+diff --git a/extensions/GUI/CCEditBox/CCEditBoxImplWin.cpp b/extensions/GUI/CCEditBox/CCEditBoxImplWin.cpp
+index fd8fc94..964999c 100755
+--- a/extensions/GUI/CCEditBox/CCEditBoxImplWin.cpp
++++ b/extensions/GUI/CCEditBox/CCEditBoxImplWin.cpp
+@@ -27,7 +27,10 @@
+ #if (CC_TARGET_PLATFORM == CC_PLATFORM_WIN32)
+ 
+ #include "CCEditBox.h"
+-#include "proj.win32/Win32InputBox.h"
++#include <windows.h>
++#include <algorithm>
++#include <string>
++#include <vector>
+ 
+ NS_CC_EXT_BEGIN
+ 
+@@ -36,6 +39,170 @@ CCEditBoxImpl* __createSystemEditBox(CCEditBox* pEditBox)
+     return new CCEditBoxImplWin(pEditBox);
+ }
+ 
++// Inline editing: one shared native EDIT control is placed over the box being edited, instead of
++// the old modal CWin32InputBox pop-up. Enter commits (and reports Return), Tab commits and moves to
++// the next visible box, Esc or clicking elsewhere commits. visit() keeps it over the box when the
++// window is resized.
++struct InlineEdit
++{
++    static std::vector<CCEditBoxImplWin*> live;   // creation order, for Tab
++    static CCEditBoxImplWin* active;
++    static HWND edit;
++    static HFONT font;
++    static WNDPROC baseProc;
++    static RECT placed;
++
++    static std::wstring wide(const std::string& s)
++    {
++        int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, NULL, 0);
++        std::wstring w(n > 0 ? n - 1 : 0, L'\0');
++        if (n > 1) MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
++        return w;
++    }
++
++    static std::string utf8(const std::wstring& w)
++    {
++        int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, NULL, 0, NULL, NULL);
++        std::string s(n > 0 ? n - 1 : 0, '\0');
++        if (n > 1) WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, &s[0], n, NULL, NULL);
++        return s;
++    }
++
++    static bool shown(CCNode* node)
++    {
++        if (!node || !node->isRunning()) return false;
++        for (; node; node = node->getParent())
++            if (!node->isVisible()) return false;
++        return true;
++    }
++
++    // The box's rectangle in window client pixels.
++    static RECT clientRect(CCEditBoxImplWin* box)
++    {
++        CCEditBox* eb = box->getCCEditBox();
++        CCSize size = eb->getContentSize();
++        CCRect world = CCRectApplyAffineTransform(CCRectMake(0, 0, size.width, size.height), eb->nodeToWorldTransform());
++        CCEGLView* view = CCEGLView::sharedOpenGLView();
++        const CCRect& vp = view->getViewPortRect();
++        float sx = view->getScaleX(), sy = view->getScaleY(), zoom = view->getFrameZoomFactor();
++        float frameH = view->getFrameSize().height;
++        RECT r;
++        r.left = (LONG)((vp.origin.x + world.origin.x * sx) * zoom);
++        r.top = (LONG)((frameH - (vp.origin.y + (world.origin.y + world.size.height) * sy)) * zoom);
++        r.right = r.left + (LONG)(world.size.width * sx * zoom);
++        r.bottom = r.top + (LONG)(world.size.height * sy * zoom);
++        return r;
++    }
++
++    static void place(CCEditBoxImplWin* box)
++    {
++        RECT r = clientRect(box);
++        if (memcmp(&r, &placed, sizeof(r)) == 0) return;
++        placed = r;
++        int h = r.bottom - r.top;
++        HFONT f = CreateFontW(-(int)(box->m_nFontSize * CCEGLView::sharedOpenGLView()->getScaleY() * 0.8f), 0, 0, 0, FW_NORMAL,
++                              FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
++                              CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Arial");
++        SendMessageW(edit, WM_SETFONT, (WPARAM)f, TRUE);
++        if (font) DeleteObject(font);
++        font = f;
++        SetWindowPos(edit, HWND_TOP, r.left, r.top, r.right - r.left, h, SWP_SHOWWINDOW);
++    }
++
++    static void open(CCEditBoxImplWin* box)
++    {
++        if (active == box) return;
++        if (active) close(false, false);
++        HWND parent = CCEGLView::sharedOpenGLView()->getHWnd();
++        if (!edit)
++        {
++            edit = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 0, 0, 0, 0, parent, NULL, GetModuleHandle(NULL), NULL);
++            baseProc = (WNDPROC)SetWindowLongPtrW(edit, GWLP_WNDPROC, (LONG_PTR)&InlineEdit::proc);
++        }
++        if (box->m_pDelegate) box->m_pDelegate->editBoxEditingDidBegin(box->m_pEditBox);
++        CCEditBox* eb = box->getCCEditBox();
++        if (eb && eb->getScriptEditBoxHandler())
++            CCScriptEngineManager::sharedManager()->getScriptEngine()->executeEvent(eb->getScriptEditBoxHandler(), "began", eb);
++
++        active = box;
++        bool password = box->m_eEditBoxInputFlag == kEditBoxInputFlagPassword;
++        SendMessageW(edit, EM_SETPASSWORDCHAR, password ? (WPARAM)L'*' : 0, 0);
++        SendMessageW(edit, EM_LIMITTEXT, box->m_nMaxLength > 0 ? box->m_nMaxLength : 0, 0);
++        SetWindowTextW(edit, wide(box->m_strText).c_str());
++        memset(&placed, 0, sizeof(placed));
++        place(box);
++        SetFocus(edit);
++        int len = GetWindowTextLengthW(edit);
++        SendMessageW(edit, EM_SETSEL, len, len);
++    }
++
++    // Commits the active box's text. refocus: give the game window the keyboard back (not when
++    // focus is already moving elsewhere).
++    static void close(bool returnPressed, bool refocus)
++    {
++        CCEditBoxImplWin* box = active;
++        if (!box) return;
++        active = NULL;
++        int len = GetWindowTextLengthW(edit);
++        std::wstring w(len, L'\0');
++        if (len) GetWindowTextW(edit, &w[0], len + 1);
++        ShowWindow(edit, SW_HIDE);
++        if (refocus) SetFocus(CCEGLView::sharedOpenGLView()->getHWnd());
++
++        std::string text = utf8(w);
++        bool changed = text != box->m_strText;
++        if (changed) box->setText(text.c_str());
++        CCEditBox* eb = box->getCCEditBox();
++        int handler = eb ? eb->getScriptEditBoxHandler() : 0;
++        CCScriptEngineProtocol* engine = CCScriptEngineManager::sharedManager()->getScriptEngine();
++        if (box->m_pDelegate)
++        {
++            if (changed) box->m_pDelegate->editBoxTextChanged(box->m_pEditBox, box->getText());
++            box->m_pDelegate->editBoxEditingDidEnd(box->m_pEditBox);
++            if (returnPressed) box->m_pDelegate->editBoxReturn(box->m_pEditBox);
++        }
++        if (handler)
++        {
++            if (changed) engine->executeEvent(handler, "changed", eb);
++            engine->executeEvent(handler, "ended", eb);
++            if (returnPressed) engine->executeEvent(handler, "return", eb);
++        }
++    }
++
++    static void tabToNext()
++    {
++        std::vector<CCEditBoxImplWin*>::iterator it = std::find(live.begin(), live.end(), active);
++        if (it == live.end()) { close(false, true); return; }
++        size_t start = it - live.begin();
++        for (size_t i = 1; i < live.size(); i++)
++        {
++            CCEditBoxImplWin* next = live[(start + i) % live.size()];
++            if (shown(next->getCCEditBox())) { open(next); return; }
++        }
++        close(false, true);
++    }
++
++    static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
++    {
++        if (msg == WM_KEYDOWN)
++        {
++            if (wParam == VK_RETURN) { close(true, true); return 0; }
++            if (wParam == VK_TAB) { tabToNext(); return 0; }
++            if (wParam == VK_ESCAPE) { close(false, true); return 0; }
++        }
++        if (msg == WM_CHAR && (wParam == '\r' || wParam == '\t' || wParam == 27)) return 0;   // no beep
++        if (msg == WM_KILLFOCUS && active) close(false, false);
++        return CallWindowProcW(baseProc, hwnd, msg, wParam, lParam);
++    }
++};
++
++std::vector<CCEditBoxImplWin*> InlineEdit::live;
++CCEditBoxImplWin* InlineEdit::active = NULL;
++HWND InlineEdit::edit = NULL;
++HFONT InlineEdit::font = NULL;
++WNDPROC InlineEdit::baseProc = NULL;
++RECT InlineEdit::placed = { 0, 0, 0, 0 };
++
+ CCEditBoxImplWin::CCEditBoxImplWin(CCEditBox* pEditText)
+ : CCEditBoxImpl(pEditText)
+ , m_pLabel(NULL)
+@@ -46,12 +213,19 @@ CCEditBoxImplWin::CCEditBoxImplWin(CCEditBox* pEditText)
+ , m_colText(ccWHITE)
+ , m_colPlaceHolder(ccGRAY)
+ , m_nMaxLength(-1)
++, m_nFontSize(20)
+ {
+-    
++    InlineEdit::live.push_back(this);
+ }
+ 
+ CCEditBoxImplWin::~CCEditBoxImplWin()
+ {
++    if (InlineEdit::active == this)
++    {
++        InlineEdit::active = NULL;
++        ShowWindow(InlineEdit::edit, SW_HIDE);
++    }
++    InlineEdit::live.erase(std::remove(InlineEdit::live.begin(), InlineEdit::live.end(), this), InlineEdit::live.end());
+ }
+ 
+ void CCEditBoxImplWin::doAnimationWhenKeyboardMove(float duration, float distance)
+@@ -82,6 +256,7 @@ bool CCEditBoxImplWin::initWithSize(const CCSize& size)
+ 
+ void CCEditBoxImplWin::setFont(const char* pFontName, int fontSize)
+ {
++    m_nFontSize = fontSize;
+ 	if(m_pLabel != NULL) {
+ 		m_pLabel->setFontName(pFontName);
+ 		m_pLabel->setFontSize(fontSize);
+@@ -220,7 +395,10 @@ void CCEditBoxImplWin::setAnchorPoint(const CCPoint& anchorPoint)
+ }
+ 
+ void CCEditBoxImplWin::visit(void)
+-{   
++{
++    if (InlineEdit::active != this) return;
++    if (InlineEdit::shown(getCCEditBox())) InlineEdit::place(this);
++    else InlineEdit::close(false, true);   // the field went away while being edited
+ }
+ 
+ static void editBoxCallbackFunc(const char* pText, void* ctx)
+@@ -247,42 +425,12 @@ static void editBoxCallbackFunc(const char* pText, void* ctx)
+ 
+ void CCEditBoxImplWin::openKeyboard()
+ {
+-    if (m_pDelegate != NULL)
+-    {
+-        m_pDelegate->editBoxEditingDidBegin(m_pEditBox);
+-    }
+-    
+-    CCEditBox* pEditBox = this->getCCEditBox();
+-    if (NULL != pEditBox && 0 != pEditBox->getScriptEditBoxHandler())
+-    {
+-        cocos2d::CCScriptEngineProtocol* pEngine = cocos2d::CCScriptEngineManager::sharedManager()->getScriptEngine();
+-        pEngine->executeEvent(pEditBox->getScriptEditBoxHandler(), "began",pEditBox);
+-    }
+-    
+-	std::string placeHolder = m_pLabelPlaceHolder->getString();
+-	if (placeHolder.length() == 0)
+-		placeHolder = "Enter value";
+-
+-	char pText[100]= {0};
+-	std::string text = getText();
+-	if (text.length())
+-		strncpy(pText, text.c_str(), 100);
+-	bool didChange = CWin32InputBox::InputBox("Input", placeHolder.c_str(), pText, 100, false) == IDOK;
+-	
+-	if (didChange) 	
+-		setText(pText);
+-
+-	if (m_pDelegate != NULL) {
+-		if (didChange)
+-			m_pDelegate->editBoxTextChanged(m_pEditBox, getText());
+-		m_pDelegate->editBoxEditingDidEnd(m_pEditBox);
+-		m_pDelegate->editBoxReturn(m_pEditBox);
+-	}
++    InlineEdit::open(this);
+ }
+ 
+ void CCEditBoxImplWin::closeKeyboard()
+ {
+-
++    if (InlineEdit::active == this) InlineEdit::close(false, true);
+ }
+ 
+ void CCEditBoxImplWin::onEnter(void)
+diff --git a/extensions/GUI/CCEditBox/CCEditBoxImplWin.h b/extensions/GUI/CCEditBox/CCEditBoxImplWin.h
+index 43d07d2..b4c322c 100755
+--- a/extensions/GUI/CCEditBox/CCEditBoxImplWin.h
++++ b/extensions/GUI/CCEditBox/CCEditBoxImplWin.h
+@@ -86,6 +86,8 @@ private:
+ 
+     int   m_nMaxLength;
+     CCSize m_EditSize;
++    int    m_nFontSize;   // size for the inline edit control
++    friend struct InlineEdit;
+ 
+ 	/*
+     CCSize     m_tContentSize;
