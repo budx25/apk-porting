@@ -1,22 +1,39 @@
 #ifndef __DESKTOP_INPUT_MATH_H__
 #define __DESKTOP_INPUT_MATH_H__
 
-// Touch paths that turn desktop input (wheel, arrow keys, Ctrl+wheel) into the drags and
-// pinches the game understands. Engine-free; cocos coordinates (y points up).
-#include <utility>
-#include <vector>
+// Turns wheel and trackpad scrolling (and Ctrl+wheel pinch) into the touch drags the game
+// understands. Engine-free; cocos coordinates (y points up).
 
 struct Pt { float x, y; };
-enum class Axis { Vertical, Horizontal };
 
-// Start point plus `steps` points. Wheel down (delta < 0) drags up on vertical lists and left on
-// horizontal ones, so content moves the way a desktop user expects. 120 delta = one notch.
-std::vector<Pt> wheelDragPath(Pt start, int wheelDelta, Axis axis, float pxPerNotch, int steps);
+// The finger offset for one wheel message: wheel down drags up (content scrolls down), and
+// Shift+wheel down or a sideways swipe to the right (WM_MOUSEHWHEEL > 0) drags left, to the next
+// page. 120 delta (one notch) = 120 px.
+Pt wheelOffset(int delta, bool horizontalWheel, bool shift);
 
-// A page swipe through the centre: 40% of the width. right == true (next page) drags left.
-std::vector<Pt> arrowSwipePath(Pt center, bool right, float width, int steps);
+// One continuous synthetic touch per scroll: the first input puts a finger down at the cursor,
+// later input moves it (at most kMaxStep px per frame, so a notch still reads as a drag), and it
+// lifts after kIdleFrames quiet frames. A trackpad's stream of small deltas thus becomes one real
+// swipe that scroll views and page views can fling.
+class WheelDrag
+{
+public:
+    enum Phase { None, Begin, Move, End };
+    struct Touch { Phase phase; bool pinch; Pt a, b; };   // b only for a pinch
+    static const int kIdleFrames = 6;
+    static constexpr float kMaxStep = 40.f;
 
-// Two fingers starting 100 px apart around `center`; delta > 0 moves them apart (zoom in).
-std::pair<std::vector<Pt>, std::vector<Pt>> pinchPaths(Pt center, int wheelDelta, float pxPerNotch, int steps);
+    void scroll(Pt at, float dx, float dy);   // move the finger by (dx, dy) px
+    void pinch(Pt at, float spread);          // change the distance between two fingers by spread px
+    Touch frame();                            // once per frame: what to send
+
+private:
+    void start(Pt at, bool pinch);
+    bool m_active = false, m_begun = false, m_pinch = false;
+    Pt m_pos = { 0, 0 };          // finger (or the pinch centre)
+    float m_spread = 0;           // distance between pinch fingers
+    Pt m_pending = { 0, 0 };      // not yet sent; a pinch uses x
+    int m_idle = 0;
+};
 
 #endif

@@ -4,8 +4,6 @@
 
 USING_NS_CC;
 
-static const int kSteps = 6;              // points per gesture after the first (one per frame)
-static const float kPxPerNotch = 120.f;   // drag distance per wheel notch, in frame pixels
 static const int kTouchA = 7, kTouchB = 8;  // ids no real mouse touch uses (the mouse is id 0)
 
 static DesktopInput* s_instance = NULL;
@@ -49,34 +47,26 @@ void DesktopInput::install()
     if (s_startFullscreen) toggleFullscreen(CCEGLView::sharedOpenGLView()->getHWnd());
 }
 
-// Window y points down while the path math uses y up: negate y on the way in and out.
-static Pt toUp(float x, float y) { return { x, -y }; }
-
 LRESULT DesktopInput::onWindowMessage(UINT message, WPARAM wParam, LPARAM lParam, BOOL* processed)
 {
     if (!s_instance || (GetKeyState(VK_LBUTTON) & 0x8000)) return 0;   // a real drag is in progress
     CCEGLView* view = CCEGLView::sharedOpenGLView();
 
-    if (message == WM_MOUSEWHEEL)
+    if (message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL)
     {
         POINT p = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         ScreenToClient(view->getHWnd(), &p);
         float zoom = view->getFrameZoomFactor();
-        Pt at = toUp(p.x / zoom, p.y / zoom);
+        Pt at = { p.x / zoom, -p.y / zoom };   // window y points down; WheelDrag works in y-up
         int delta = GET_WHEEL_DELTA_WPARAM(wParam);
         WORD keys = GET_KEYSTATE_WPARAM(wParam);
-        Gesture g;
-        if (keys & MK_CONTROL)
-        {
-            std::pair<std::vector<Pt>, std::vector<Pt>> fingers = pinchPaths(at, delta, kPxPerNotch / 2, kSteps);
-            g.a = fingers.first;
-            g.b = fingers.second;
-        }
+        if (message == WM_MOUSEWHEEL && (keys & MK_CONTROL))
+            s_instance->m_drag.pinch(at, delta / 2.f);
         else
         {
-            g.a = wheelDragPath(at, delta, (keys & MK_SHIFT) ? Axis::Horizontal : Axis::Vertical, kPxPerNotch, kSteps);
+            Pt d = wheelOffset(delta, message == WM_MOUSEHWHEEL, (keys & MK_SHIFT) != 0);
+            s_instance->m_drag.scroll(at, d.x, d.y);
         }
-        s_instance->queue(g);
         *processed = TRUE;
     }
     else if (message == WM_KEYDOWN && wParam == VK_F11)
@@ -91,31 +81,19 @@ LRESULT DesktopInput::onWindowMessage(UINT message, WPARAM wParam, LPARAM lParam
         ScriptingCore::getInstance()->evalString("if (pc.onEnter) pc.onEnter();", &ignored);
         *processed = TRUE;
     }
-    else if (message == WM_KEYDOWN && (wParam == VK_LEFT || wParam == VK_RIGHT))
-    {
-        CCSize frame = view->getFrameSize();
-        Gesture g;
-        g.a = arrowSwipePath(toUp(frame.width / 2, frame.height / 2), wParam == VK_RIGHT, frame.width, kSteps);
-        s_instance->queue(g);
-        *processed = TRUE;
-    }
     return 0;
 }
 
 void DesktopInput::update(float)
 {
-    if (m_queue.empty()) return;
-    Gesture& g = m_queue.front();
+    WheelDrag::Touch t = m_drag.frame();
+    if (t.phase == WheelDrag::None) return;
     int ids[2] = { kTouchA, kTouchB };
-    float xs[2], ys[2];
-    int n = g.b.empty() ? 1 : 2;
-    xs[0] = g.a[g.next].x; ys[0] = -g.a[g.next].y;
-    if (n == 2) { xs[1] = g.b[g.next].x; ys[1] = -g.b[g.next].y; }
+    float xs[2] = { t.a.x, t.b.x }, ys[2] = { -t.a.y, -t.b.y };
+    int n = t.pinch ? 2 : 1;
 
     CCEGLView* view = CCEGLView::sharedOpenGLView();
-    if (g.next == 0) view->handleTouchesBegin(n, ids, xs, ys);
-    else if (g.next + 1 < g.a.size()) view->handleTouchesMove(n, ids, xs, ys);
+    if (t.phase == WheelDrag::Begin) view->handleTouchesBegin(n, ids, xs, ys);
+    else if (t.phase == WheelDrag::Move) view->handleTouchesMove(n, ids, xs, ys);
     else view->handleTouchesEnd(n, ids, xs, ys);
-
-    if (++g.next == g.a.size()) m_queue.pop_front();
 }

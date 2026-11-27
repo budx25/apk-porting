@@ -3,11 +3,12 @@
 
 #include "cocos2d.h"
 #include "DesktopInputMath.h"
-#include <deque>
 
-// Desktop input for a touch game: mouse wheel scrolls (Shift = sideways), Ctrl+wheel pinches,
-// Left/Right arrows swipe pages. Each becomes a synthetic touch gesture, played one point per
-// frame so scroll views and page views see a real drag. Esc is handled by the engine (back key).
+// Desktop input for a touch game: the mouse wheel and trackpad two-finger swipes scroll and turn
+// pages (Shift+wheel = sideways), Ctrl+wheel (and trackpad pinch) pinches. Each scroll becomes one
+// synthetic touch played over the following frames, so scroll views and page views see a real
+// drag. F11 toggles fullscreen; Enter confirms one-button prompts (shim.js). Esc is the engine's
+// back key.
 class DesktopInput : public cocos2d::CCObject
 {
 public:
@@ -16,15 +17,8 @@ public:
     virtual void update(float dt);
 
 private:
-    struct Gesture
-    {
-        std::vector<Pt> a, b;   // b is empty for one-finger gestures
-        size_t next = 0;
-    };
-    void queue(Gesture g) { m_queue.push_back(g); }
     static LRESULT onWindowMessage(UINT message, WPARAM wParam, LPARAM lParam, BOOL* processed);
-
-    std::deque<Gesture> m_queue;
+    WheelDrag m_drag;
 };
 
 #endif

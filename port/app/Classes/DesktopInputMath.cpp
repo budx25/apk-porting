@@ -1,31 +1,61 @@
 #include "DesktopInputMath.h"
+#include <algorithm>
 
-static std::vector<Pt> line(Pt from, float dx, float dy, int steps)
+Pt wheelOffset(int delta, bool horizontalWheel, bool shift)
 {
-    std::vector<Pt> path;
-    for (int i = 0; i <= steps; i++)
+    if (horizontalWheel) return { (float)-delta, 0 };
+    if (shift) return { (float)delta, 0 };
+    return { 0, (float)-delta };
+}
+
+void WheelDrag::start(Pt at, bool pinch)
+{
+    m_active = true;
+    m_begun = false;
+    m_pinch = pinch;
+    m_pos = at;
+    m_spread = 100;
+    m_pending = { 0, 0 };
+}
+
+void WheelDrag::scroll(Pt at, float dx, float dy)
+{
+    if (!m_active) start(at, false);
+    if (m_pinch) return;   // mid-pinch: dropped
+    m_pending.x += dx;
+    m_pending.y += dy;
+    m_idle = 0;
+}
+
+void WheelDrag::pinch(Pt at, float spread)
+{
+    if (!m_active) start(at, true);
+    if (!m_pinch) return;   // mid-scroll: dropped
+    m_pending.x += spread;
+    m_idle = 0;
+}
+
+static float take(float& pending)
+{
+    float step = std::max(-WheelDrag::kMaxStep, std::min(WheelDrag::kMaxStep, pending));
+    pending -= step;
+    return step;
+}
+
+WheelDrag::Touch WheelDrag::frame()
+{
+    if (!m_active) return { None, false, { 0, 0 }, { 0, 0 } };
+    Phase phase = Move;
+    if (!m_begun)
+        m_begun = true, phase = Begin;
+    else if (m_pending.x != 0 || m_pending.y != 0)
     {
-        float t = steps > 0 ? (float)i / steps : 1.f;
-        path.push_back({ from.x + dx * t, from.y + dy * t });
+        if (m_pinch) m_spread = std::max(10.f, m_spread + take(m_pending.x));
+        else m_pos = { m_pos.x + take(m_pending.x), m_pos.y + take(m_pending.y) };
     }
-    return path;
-}
+    else if (++m_idle >= kIdleFrames)
+        m_active = false, phase = End;
 
-std::vector<Pt> wheelDragPath(Pt start, int wheelDelta, Axis axis, float pxPerNotch, int steps)
-{
-    float distance = wheelDelta / 120.f * pxPerNotch;
-    return axis == Axis::Vertical ? line(start, 0, -distance, steps) : line(start, distance, 0, steps);
-}
-
-std::vector<Pt> arrowSwipePath(Pt center, bool right, float width, int steps)
-{
-    float distance = 0.4f * width;
-    Pt start = { center.x + (right ? distance : -distance) / 2, center.y };
-    return line(start, right ? -distance : distance, 0, steps);
-}
-
-std::pair<std::vector<Pt>, std::vector<Pt>> pinchPaths(Pt center, int wheelDelta, float pxPerNotch, int steps)
-{
-    float spread = wheelDelta / 120.f * pxPerNotch / 2;
-    return { line({ center.x - 50, center.y }, -spread, 0, steps), line({ center.x + 50, center.y }, spread, 0, steps) };
+    if (!m_pinch) return { phase, false, m_pos, { 0, 0 } };
+    return { phase, true, { m_pos.x - m_spread / 2, m_pos.y }, { m_pos.x + m_spread / 2, m_pos.y } };
 }
