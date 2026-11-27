@@ -16,6 +16,7 @@
 #include "XMLHTTPRequest.h"
 #include "jsb_websocket.h"
 #include "PcBindings.h"
+#include "DesktopInput.h"
 #include <windows.h>
 
 USING_NS_CC;
@@ -44,6 +45,7 @@ bool AppDelegate::applicationDidFinishLaunching()
     director->setOpenGLView(CCEGLView::sharedOpenGLView());
     director->setDisplayStats(false);
     director->setAnimationInterval(1.0 / 60);
+    DesktopInput::install();   // wheel / arrows / Ctrl+wheel as touch gestures
 
     // Working directory is the game data folder (set by the launcher). The APK keeps scripts
     // and UI under UI/, sprite sheets under */resources-large/, and the engine's JS glue
