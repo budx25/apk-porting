@@ -37,9 +37,13 @@ pub fn game_command(p: &Paths, s: &Settings) -> Command {
 }
 
 pub fn game_running() -> bool {
+    mutex_exists(GAME_MUTEX)
+}
+
+fn mutex_exists(name: &str) -> bool {
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::Threading::{OpenMutexW, SYNCHRONIZATION_SYNCHRONIZE};
-    let name = wide(GAME_MUTEX);
+    let name = wide(name);
     let h = unsafe { OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, 0, name.as_ptr()) };
     if h.is_null() {
         return false;
@@ -93,15 +97,16 @@ mod tests {
     }
 
     #[test]
-    fn game_running_detects_mutex() {
+    fn mutex_exists_detects_mutex() {
         use windows_sys::Win32::Foundation::CloseHandle;
         use windows_sys::Win32::System::Threading::CreateMutexW;
-        assert!(!game_running());
-        let name: Vec<u16> = GAME_MUTEX.encode_utf16().chain(Some(0)).collect();
-        let h = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
+        // a private name, so a real running game (which holds GAME_MUTEX) doesn't affect the test
+        let name = format!(r"Local\NinjaHeroesPC.Test.{}", std::process::id());
+        assert!(!mutex_exists(&name));
+        let h = unsafe { CreateMutexW(std::ptr::null(), 0, wide(&name).as_ptr()) };
         assert!(!h.is_null());
-        assert!(game_running());
+        assert!(mutex_exists(&name));
         unsafe { CloseHandle(h) };
-        assert!(!game_running());
+        assert!(!mutex_exists(&name));
     }
 }
