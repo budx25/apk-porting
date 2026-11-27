@@ -15,6 +15,17 @@ pub fn game_exe(p: &Paths) -> std::path::PathBuf {
     p.bin.join("NinjaHeroes.exe")
 }
 
+/// Why the game can't start yet, as a message for the owner; `None` when it can.
+pub fn not_ready(p: &Paths) -> Option<&'static str> {
+    if !game_exe(p).is_file() {
+        return Some("The game itself isn't installed yet. Build it with port\\build.ps1 -Install, then start the launcher again.");
+    }
+    if !p.game.join("VERSION").is_file() {
+        return Some("The game files aren't installed yet. Start the launcher again and choose the Ninja Heroes APK.");
+    }
+    None
+}
+
 pub fn game_command(p: &Paths, s: &Settings) -> Command {
     let mut cmd = Command::new(game_exe(p));
     cmd.arg("--width").arg(s.width.to_string()).arg("--height").arg(s.height.to_string());
@@ -65,6 +76,20 @@ mod tests {
         assert_eq!(cmd.get_current_dir(), Some(p.game.as_path()));
         let full = game_command(&p, &Settings { width: 800, height: 600, fullscreen: true });
         assert!(full.get_args().any(|a| a == "--fullscreen"));
+    }
+
+    #[test]
+    fn not_ready_explains_what_is_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = Paths::new(dir.path().join("root"));
+        assert!(not_ready(&p).unwrap().contains("port\\build.ps1"));
+        std::fs::create_dir_all(&p.bin).unwrap();
+        std::fs::write(game_exe(&p), b"exe").unwrap();
+        // a failed first install leaves no game files: say so instead of starting a game that can't run
+        assert!(not_ready(&p).unwrap().contains("APK"));
+        std::fs::create_dir_all(&p.game).unwrap();
+        std::fs::write(p.game.join("VERSION"), b"{}").unwrap();
+        assert_eq!(not_ready(&p), None);
     }
 
     #[test]

@@ -3,6 +3,7 @@
 #include "CCEGLView.h"
 #include "PcBindings.h"
 #include "DesktopInput.h"
+#include "GameMutex.h"
 #include <signal.h>
 #include <shellapi.h>
 #include <dbghelp.h>
@@ -119,8 +120,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
     pc_set_debug(opt.debug);
     DesktopInput::setStartFullscreen(opt.fullscreen);
 
-    // Held while the game runs, so the launcher can tell (see launcher/src/launch.rs).
-    HANDLE running = CreateMutexW(NULL, FALSE, L"Local\NinjaHeroesPC.Game");
+    HANDLE running = CreateMutexW(NULL, FALSE, kGameMutex);
 
     AppDelegate app;
     CCEGLView* eglView = CCEGLView::sharedOpenGLView();

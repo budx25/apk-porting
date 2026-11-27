@@ -38,12 +38,9 @@ fn apk_from_args() -> Option<PathBuf> {
 }
 
 fn launch_game(p: &Paths, s: &Settings) {
-    if !launch::game_exe(p).is_file() {
-        log(p, "game not installed");
-        rfd::MessageDialog::new()
-            .set_title("Ninja Heroes")
-            .set_description("The game itself isn't installed yet. Build it with port\\build.ps1 -Install, then start the launcher again.")
-            .show();
+    if let Some(why) = launch::not_ready(p) {
+        log(p, "game not ready");
+        rfd::MessageDialog::new().set_title("Ninja Heroes").set_description(why).show();
         return;
     }
     match launch::game_command(p, s).spawn() {
