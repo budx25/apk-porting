@@ -87,6 +87,17 @@
         })
     };
 
+    // Enter (sent by the host): press the button of the game's open prompt, but only when it has
+    // exactly one. PromptView.currentPage is the open prompt; its buttons live in menuContainer.
+    pc.onEnter = function () {
+        var page = typeof PromptView !== 'undefined' ? PromptView.currentPage : null;
+        if (!page || !page.isRunning() || !page.isVisible() || !(page.menuContainer instanceof cc.Menu)) return;
+        var buttons = (page.menuContainer.getChildren() || []).filter(function (n) {
+            return n instanceof cc.MenuItem && n.isVisible() && n.isEnabled();
+        });
+        if (buttons.length === 1) buttons[0].activate();
+    };
+
     global.anysdk = inert('anysdk');
     global.channelBinding = new global.ts.ChannelBinding();
 

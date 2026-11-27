@@ -1,4 +1,5 @@
 #include "DesktopInput.h"
+#include "ScriptingCore.h"
 #include <windowsx.h>
 
 USING_NS_CC;
@@ -45,6 +46,13 @@ LRESULT DesktopInput::onWindowMessage(UINT message, WPARAM wParam, LPARAM lParam
             g.a = wheelDragPath(at, delta, (keys & MK_SHIFT) ? Axis::Horizontal : Axis::Vertical, kPxPerNotch, kSteps);
         }
         s_instance->queue(g);
+        *processed = TRUE;
+    }
+    else if (message == WM_KEYDOWN && wParam == VK_RETURN)
+    {
+        // shim.js decides what Enter means (confirm a one-button dialog); text fields get Enter themselves
+        jsval ignored;
+        ScriptingCore::getInstance()->evalString("if (pc.onEnter) pc.onEnter();", &ignored);
         *processed = TRUE;
     }
     else if (message == WM_KEYDOWN && (wParam == VK_LEFT || wParam == VK_RIGHT))
