@@ -2,6 +2,7 @@
 #include "AppDelegate.h"
 #include "CCEGLView.h"
 #include "PcBindings.h"
+#include "DesktopInput.h"
 #include <signal.h>
 #include <shellapi.h>
 #include <dbghelp.h>
@@ -80,6 +81,7 @@ struct Options
     int width = 1136;
     int height = 640;
     std::wstring log = L"game.log";
+    bool fullscreen = false;
     bool debug = false;
 };
 
@@ -95,6 +97,7 @@ static Options parseOptions()
         if (a == L"--width" && hasValue) o.width = _wtoi(argv[++i]);
         else if (a == L"--height" && hasValue) o.height = _wtoi(argv[++i]);
         else if (a == L"--log" && hasValue) o.log = argv[++i];
+        else if (a == L"--fullscreen") o.fullscreen = true;
         else if (a == L"--debug") o.debug = true;
     }
     LocalFree(argv);
@@ -114,6 +117,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
     setvbuf(stdout, NULL, _IONBF, 0);
     installCrashLogging();
     pc_set_debug(opt.debug);
+    DesktopInput::setStartFullscreen(opt.fullscreen);
 
     // Held while the game runs, so the launcher can tell (see launcher/src/launch.rs).
     HANDLE running = CreateMutexW(NULL, FALSE, L"Local\NinjaHeroesPC.Game");

@@ -9,6 +9,36 @@ static const float kPxPerNotch = 120.f;   // drag distance per wheel notch, in f
 static const int kTouchA = 7, kTouchB = 8;  // ids no real mouse touch uses (the mouse is id 0)
 
 static DesktopInput* s_instance = NULL;
+static bool s_startFullscreen = false;
+
+// F11: borderless window covering the current monitor, and back. The engine's WM_SIZE
+// handling (patch 0011) rescales the game to the new client size.
+static bool s_fullscreen = false;
+static LONG s_savedStyle = 0;
+static RECT s_savedRect = { 0, 0, 0, 0 };
+
+static void toggleFullscreen(HWND hwnd)
+{
+    if (!s_fullscreen)
+    {
+        s_savedStyle = GetWindowLong(hwnd, GWL_STYLE);
+        GetWindowRect(hwnd, &s_savedRect);
+        MONITORINFO mi = { sizeof(mi) };
+        GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi);
+        SetWindowLong(hwnd, GWL_STYLE, (s_savedStyle & ~(WS_CAPTION | WS_THICKFRAME | WS_BORDER)) | WS_POPUP);
+        SetWindowPos(hwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
+                     mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    }
+    else
+    {
+        SetWindowLong(hwnd, GWL_STYLE, s_savedStyle);
+        SetWindowPos(hwnd, NULL, s_savedRect.left, s_savedRect.top, s_savedRect.right - s_savedRect.left,
+                     s_savedRect.bottom - s_savedRect.top, SWP_FRAMECHANGED | SWP_NOZORDER | SWP_SHOWWINDOW);
+    }
+    s_fullscreen = !s_fullscreen;
+}
+
+void DesktopInput::setStartFullscreen(bool on) { s_startFullscreen = on; }
 
 void DesktopInput::install()
 {
@@ -16,6 +46,7 @@ void DesktopInput::install()
     s_instance = new DesktopInput();
     CCDirector::sharedDirector()->getScheduler()->scheduleUpdateForTarget(s_instance, 0, false);
     CCEGLView::sharedOpenGLView()->setWndProc(&DesktopInput::onWindowMessage);
+    if (s_startFullscreen) toggleFullscreen(CCEGLView::sharedOpenGLView()->getHWnd());
 }
 
 // Window y points down while the path math uses y up: negate y on the way in and out.
@@ -46,6 +77,11 @@ LRESULT DesktopInput::onWindowMessage(UINT message, WPARAM wParam, LPARAM lParam
             g.a = wheelDragPath(at, delta, (keys & MK_SHIFT) ? Axis::Horizontal : Axis::Vertical, kPxPerNotch, kSteps);
         }
         s_instance->queue(g);
+        *processed = TRUE;
+    }
+    else if (message == WM_KEYDOWN && wParam == VK_F11)
+    {
+        toggleFullscreen(view->getHWnd());
         *processed = TRUE;
     }
     else if (message == WM_KEYDOWN && wParam == VK_RETURN)

@@ -12,6 +12,7 @@ class DesktopInput : public cocos2d::CCObject
 {
 public:
     static void install();
+    static void setStartFullscreen(bool on);   // --fullscreen; applied by install()
     virtual void update(float dt);
 
 private:
