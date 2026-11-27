@@ -155,6 +155,7 @@ xcopy /Y /Q "$(ProjectDir)..\..\..\external\libwebsockets\win32\lib\*.*" "$(OutD
     <ClCompile Include="main.cpp" />
     <ClCompile Include="..\Classes\AppDelegate.cpp" />
     <ClCompile Include="..\Classes\PcBindings.cpp" />
+    <ClCompile Include="..\Classes\DesktopInputMath.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main.h" />
@@ -162,6 +163,7 @@ xcopy /Y /Q "$(ProjectDir)..\..\..\external\libwebsockets\win32\lib\*.*" "$(OutD
     <ClInclude Include="..\Classes\AppDelegate.h" />
     <ClInclude Include="..\Classes\PcBindings.h" />
     <ClInclude Include="..\Classes\SafePath.h" />
+    <ClInclude Include="..\Classes\DesktopInputMath.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="res\game.ico" />
