@@ -1,4 +1,5 @@
 mod extract;
+mod http;
 mod install;
 mod paths;
 mod urls;
