@@ -1,3 +1,7 @@
 .claude/
 apk/
 spike/
+launcher/target/
+port/.engine/
+port/out/
+.superpowers/
